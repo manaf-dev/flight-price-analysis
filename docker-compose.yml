@@ -103,6 +103,8 @@ services:
       MYSQL_PASSWORD: staging_password
     volumes:
       - mysql_staging_data:/var/lib/mysql
+      - ./sql/init_staging.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
     networks:
       - flight_network
 
@@ -116,7 +118,7 @@ services:
       POSTGRES_DB: analytics_db
     volumes:
       - postgres_analytics_data:/var/lib/postgresql/data
-      - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
+      # - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     networks:
       - flight_network
@@ -125,23 +127,17 @@ services:
   spark:
     image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
     command: sleep infinity
-    # environment:
-    #   POSTGRES_HOST: db
-    #   POSTGRES_PORT: 5432
-    #   POSTGRES_USER: ${POSTGRES_USER:-postgres}
-    #   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    #   POSTGRES_DB: ${POSTGRES_DB:-postgresdb}
     depends_on:
       - mysql
       - postgres_analytics
     ports:
       - "4040:4040"
-    # volumes:
-    #   - .:/streaming/app
-    #   - ./input_data:/streaming/app/input_data 
+    volumes:
+      - ./spark:/opt/spark
+      - ./data:/opt/data
+    restart: unless-stopped
     networks:
       - flight_network
-    restart: unless-stopped
   
 
 
