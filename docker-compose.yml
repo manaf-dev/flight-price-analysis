@@ -1,0 +1,155 @@
+
+x-airflow-common:
+  &airflow-common
+  image: apache/airflow:2.7.3-python3.11
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres_airflow/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres_airflow:
+      condition: service_healthy
+    
+
+services:
+  # PostgreSQL for Airflow metadata
+  postgres_airflow:
+    image: postgres:13
+    container_name: postgres_airflow
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_airflow_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - flight_network
+
+  # Airflow Webserver
+  airflow-server:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - flight_network
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: unless-stopped
+    networks:
+      - flight_network
+
+  # Airflow Init
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@flight.com \
+          --password admin
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: 'admin'
+      _AIRFLOW_WWW_USER_PASSWORD: 'admin'
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    networks:
+      - flight_network
+
+
+  # Mysql for staging
+  mysql:
+    image: mysql:8.4
+    container_name: mysql_staging
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: staging_db
+      MYSQL_USER: staging_user
+      MYSQL_PASSWORD: staging_password
+    volumes:
+      - mysql_staging_data:/var/lib/mysql
+    networks:
+      - flight_network
+
+  # PostgreSQL for Analytics
+  postgres_analytics:
+    image: postgres:14-alpine
+    container_name: postgres_analytics
+    environment:
+      POSTGRES_USER: analytics_user
+      POSTGRES_PASSWORD: analytics_password
+      POSTGRES_DB: analytics_db
+    volumes:
+      - postgres_analytics_data:/var/lib/postgresql/data
+      - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - flight_network
+
+  # Spark 
+  spark:
+    image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+    command: sleep infinity
+    # environment:
+    #   POSTGRES_HOST: db
+    #   POSTGRES_PORT: 5432
+    #   POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    #   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    #   POSTGRES_DB: ${POSTGRES_DB:-postgresdb}
+    depends_on:
+      - mysql
+      - postgres_analytics
+    ports:
+      - "4040:4040"
+    # volumes:
+    #   - .:/streaming/app
+    #   - ./input_data:/streaming/app/input_data 
+    networks:
+      - flight_network
+    restart: unless-stopped
+  
+
+
+volumes:
+  postgres_airflow_data:
+  postgres_analytics_data:
+  mysql_staging_data:
+
+networks:
+  flight_network:
+    driver: bridge
