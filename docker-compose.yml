@@ -125,7 +125,7 @@ services:
 
   # Spark 
   spark:
-    image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+    build: .
     command: sleep infinity
     depends_on:
       - mysql
@@ -133,9 +133,8 @@ services:
     ports:
       - "4040:4040"
     volumes:
-      - ./spark:/opt/spark
+      - ./spark:/opt/jobs
       - ./data:/opt/data
-    restart: unless-stopped
     networks:
       - flight_network
   

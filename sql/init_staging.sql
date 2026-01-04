@@ -1,7 +1,7 @@
 -- MySQL staging database schema
-DROP TABLE IF EXISTS staging;
+DROP TABLE IF EXISTS staging_prices;
 
-CREATE TABLE staging (
+CREATE TABLE staging_prices (
     id INT AUTO_INCREMENT PRIMARY KEY,
     airline VARCHAR(255) NOT NULL,
     source VARCHAR(255) NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE staging (
     booking_source VARCHAR(255) NOT NULL,
     base_fare_bdt DOUBLE(10, 2) NOT NULL,
     tax_and_surcharge_bdt DOUBLE(10, 2) NOT NULL,
-    total_fare_bdt DOUBLE NOT NULL,
+    total_fare_bdt DOUBLE(10, 2) NOT NULL,
     seasonality VARCHAR(255) NOT NULL,
     days_before_departure INT NOT NULL
 )

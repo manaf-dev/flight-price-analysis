@@ -1,0 +1,2 @@
+pyspark==4.1.0
+python-decouple==3.8
