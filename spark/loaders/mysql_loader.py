@@ -12,10 +12,6 @@ def load_to_mysql(spark, df):
     Args:
         spark: SparkSession instance
         df: Input PySpark DataFrame
-        mysql_config: Optional dictionary with MySQL configuration
-                     Defaults: host='mysql', port='3306', database='staging_db',
-                              user='staging_user', password='staging_password',
-                              table='staging_prices'
     
     Returns:
         Boolean indicating success

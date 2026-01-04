@@ -11,7 +11,7 @@ from extract import extract_data
 from loaders import load_to_mysql
 from pyspark.sql import SparkSession
 from schema import FLIGHT_PRICE_SCHEMA
-from transform import transform
+from transform import clean_column_names, transform
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,11 +39,15 @@ def main():
         # Extract
         df = extract_data(spark, csv_path, FLIGHT_PRICE_SCHEMA)
         
+        # Clean column names
+        df = clean_column_names(df)
+        
+        # Load to MySQL (staging)
+        load_staging = load_to_mysql(spark, df)
+
         # Transform
         df = transform(spark, df)
         
-        # Load to MySQL (staging)
-        load_to_mysql(spark, df)
         
         logger.info("ETL pipeline completed successfully")
         spark.stop()

@@ -7,6 +7,25 @@ from pyspark.sql.functions import col, to_timestamp
 logger = logging.getLogger(__name__)
 
 
+
+def clean_column_names(df):
+    """
+    Clean column names by removing leading/trailing spaces, 
+    replacing spaces with underscores, and converting to lowercase.
+    """
+    logger.info("Cleaning column names")
+    for old_col in df.columns:
+        new_col = old_col.strip() \
+            .replace(' ', '_') \
+            .replace('(', '') \
+            .replace(')', '') \
+            .replace('&', 'and') \
+            .lower()
+        
+        df = df.withColumnRenamed(old_col, new_col)
+    return df
+
+
 def transform(spark, df):
     """
     Transform and clean flight price data.
@@ -20,17 +39,6 @@ def transform(spark, df):
     """
     logger.info("Starting data transformation")
     
-    # Clean column names
-    for old_col in df.columns:
-        new_col = old_col.strip() \
-            .replace(' ', '_') \
-            .replace('(', '') \
-            .replace(')', '') \
-            .replace('&', 'and') \
-            .lower()
-        
-        df = df.withColumnRenamed(old_col, new_col)
-
     # Handle missing and null values
     df = df.na.drop()
 
