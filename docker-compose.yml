@@ -118,7 +118,7 @@ services:
       POSTGRES_DB: analytics_db
     volumes:
       - postgres_analytics_data:/var/lib/postgresql/data
-      # - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     networks:
       - flight_network
