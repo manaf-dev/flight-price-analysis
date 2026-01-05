@@ -1,12 +1,22 @@
 import logging
 
-from pyspark.sql.functions import avg, col, count, dense_rank, lit, when
+from pyspark.sql.functions import (
+    avg,
+    col,
+    count,
+    dense_rank,
+    lit,
+    max,
+    min,
+    round,
+    when,
+)
 from pyspark.sql.window import Window
 
 logger = logging.getLogger(__name__)
 
 # Define peak seasons
-PEAK_SEASONS = ['eid', 'winter_holidays', 'summer_vacation']
+PEAK_SEASONS = ["Eid", "Hajj", "Winter Holidays"]
 
 
 def compute_kpi_airline_fares(df):
@@ -90,33 +100,36 @@ def compute_kpi_popular_routes(df):
 def compute_kpi_airline_bookings(df):
     """
     Compute KPI: Booking Count by Airline
-    
+
     Args:
         df: Transformed DataFrame
-    
-    Returns:
+
+    Returns:peak_season_bookings
         KPI DataFrame
     """
     logger.info("Computing KPI: Booking Count by Airline")
-    
+
     # Classify as peak or non-peak
     df_seasonal = df.withColumn(
         'season_type',
         when(col('seasonality').isin(PEAK_SEASONS), 'peak').otherwise('non_peak')
     )
-    
+
     total_bookings = df.count()
-    
-    kpi_df = df_seasonal.groupBy('airline', 'season_type').agg(
-        count('*').alias('bookings')
-    ).pivot('season_type').fill(0)
-    
+
+    kpi_df = (
+        df_seasonal.groupBy("airline")
+        .pivot("season_type")
+        .agg(count("departure_date_and_time").alias("bookings"))
+        .fillna(0)
+    )
+
     # Rename columns if they exist
     if 'peak' in kpi_df.columns:
         kpi_df = kpi_df.withColumnRenamed('peak', 'peak_season_bookings')
     if 'non_peak' in kpi_df.columns:
         kpi_df = kpi_df.withColumnRenamed('non_peak', 'non_peak_bookings')
-    
+
     # Calculate total and percentage
     kpi_df = kpi_df.withColumn(
         'total_bookings',
@@ -131,5 +144,5 @@ def compute_kpi_airline_bookings(df):
         'non_peak_bookings',
         'booking_share_percentage'
     )
-    
+
     return kpi_df

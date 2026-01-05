@@ -2,6 +2,8 @@ FROM apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
 
 USER root
 
+RUN mkdir -p /opt/jobs /opt/data /opt/jars
+
 WORKDIR /opt/jobs
 
 COPY requirements.txt .

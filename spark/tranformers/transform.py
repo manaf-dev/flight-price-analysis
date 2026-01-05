@@ -96,10 +96,10 @@ def transform(spark, df):
     logger.info(f"Transformation complete. Final record count: {row_count}")
     
     # Compute KPIs
-    kpi_airline_fares = compute_kpi_airline_fares(spark, df)
-    kpi_seasonal_variation = compute_kpi_seasonal_variation(spark, df)
-    kpi_popular_routes = compute_kpi_popular_routes(spark, df)
-    kpi_airline_bookings = compute_kpi_airline_bookings(spark, df)
+    kpi_airline_fares = compute_kpi_airline_fares(df)
+    kpi_seasonal_variation = compute_kpi_seasonal_variation(df)
+    kpi_popular_routes = compute_kpi_popular_routes(df)
+    kpi_airline_bookings = compute_kpi_airline_bookings(df)
     
     logger.info("All KPIs computed successfully")
     

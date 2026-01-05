@@ -1,10 +1,10 @@
 -- PostgreSQL Analytics Database Schema
 
-DROP TABLE IF EXISTS kpi_seasonal_variation;
-DROP TABLE IF EXISTS kpi_popular_routes;
-DROP TABLE IF EXISTS kpi_airline_bookings;
-DROP TABLE IF EXISTS kpi_airline_fares;
-DROP TABLE IF EXISTS flight_prices;
+DROP TABLE IF EXISTS kpi_seasonal_variation CASCADE;
+DROP TABLE IF EXISTS kpi_popular_routes CASCADE;
+DROP TABLE IF EXISTS kpi_airline_bookings CASCADE;
+DROP TABLE IF EXISTS kpi_airline_fares CASCADE;
+DROP TABLE IF EXISTS flight_prices CASCADE;
 
 -- flight prices table
 CREATE TABLE flight_prices (
