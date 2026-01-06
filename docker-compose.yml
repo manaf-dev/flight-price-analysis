@@ -1,7 +1,7 @@
-
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:2.7.3-python3.11
+  build:
+    context: ./docker/airflow
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -10,6 +10,11 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
+    # Connection configurations
+    AIRFLOW_CONN_SPARK_DEFAULT: 'spark://spark-master:7077'
+    AIRFLOW_CONN_MYSQL_STAGING: 'mysql://staging_user:staging_password@mysql:3306/staging_db'
+    AIRFLOW_CONN_POSTGRES_ANALYTICS: 'postgres://analytics_user:analytics_password@postgres_analytics:5432/analytics_db'
+    AIRFLOW_CONN_FS_DEFAULT: '{"conn_type": "fs", "extra": {"path": "/opt/data"}}'
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
@@ -46,12 +51,25 @@ services:
     command: webserver
     ports:
       - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./spark:/opt/jobs
+      - ./data:/opt/data
+      - ./jars:/opt/jars
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 10s
       timeout: 10s
       retries: 5
     restart: unless-stopped
+    depends_on:
+      - postgres_airflow
+      - mysql
+      - postgres_analytics
+      - spark-master
     networks:
       - flight_network
 
@@ -59,7 +77,20 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./spark:/opt/jobs
+      - ./data:/opt/data
+      - ./jars:/opt/jars
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
+    depends_on:
+      - postgres_airflow
+      - mysql
+      - postgres_analytics
+      - spark-master
     networks:
       - flight_network
 
@@ -77,7 +108,8 @@ services:
           --lastname User \
           --role Admin \
           --email admin@flight.com \
-          --password admin
+          --password admin 2>/dev/null || true
+        echo "Airflow initialized successfully"
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'
@@ -104,6 +136,11 @@ services:
     volumes:
       - mysql_staging_data:/var/lib/mysql
       - ./sql/init_staging.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "staging_user", "-pstaging_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - flight_network
@@ -116,28 +153,95 @@ services:
       POSTGRES_USER: analytics_user
       POSTGRES_PASSWORD: analytics_password
       POSTGRES_DB: analytics_db
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_analytics_data:/var/lib/postgresql/data
       - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics_user -d analytics_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - flight_network
 
-  # Spark 
-  spark:
+  # Spark Master
+  spark-master:
     build: .
-    command: sleep infinity
-    depends_on:
-      - mysql
-      - postgres_analytics
+    container_name: spark-master
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
+      --host spark-master
+      --port 7077
+      --webui-port 8080
     ports:
-      - "4040:4040"
+      - "8081:8080"
+      - "7077:7077"
     volumes:
       - ./spark:/opt/jobs
       - ./data:/opt/data
+      - ./jars:/opt/jars
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
     networks:
       - flight_network
-  
+
+
+  # Spark Worker 1
+  spark-worker-1:
+    build: .
+    container_name: spark-worker-1
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    environment:
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    ports:
+      - "8082:8081"
+    volumes:
+      - ./spark:/opt/jobs
+      - ./data:/opt/data
+      - ./jars:/opt/jars
+    restart: unless-stopped
+    networks:
+      - flight_network
+
+
+  # Spark Worker 2
+  spark-worker-2:
+    build: .
+    container_name: spark-worker-2
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    environment:
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    ports:
+      - "8083:8081"
+    volumes:
+      - ./spark:/opt/jobs
+      - ./data:/opt/data
+      - ./jars:/opt/jars
+    restart: unless-stopped
+    networks:
+      - flight_network
 
 
 volumes:
