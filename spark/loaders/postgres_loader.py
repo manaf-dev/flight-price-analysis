@@ -33,7 +33,7 @@ def load_to_postgres(df, config):
             "driver": "org.postgresql.Driver",
         }
         df.write.jdbc(
-            url=jdbc_url, table=pg_table, mode="append", properties=jdbc_properties
+            url=jdbc_url, table=pg_table, mode="overwrite", properties=jdbc_properties
         )
 
         row_count = df.count()
