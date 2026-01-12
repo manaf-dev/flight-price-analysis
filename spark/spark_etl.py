@@ -59,23 +59,37 @@ def main():
             spark.stop()
 
         # Transform
-        df_transformed, kpi_fares, kpi_seasonal, kpi_routes, kpi_bookings = transform(spark, df_raw)
+        (
+            dim_airline,
+            dim_route,
+            dim_class,
+            dim_booking_source,
+            fact_flight_prices,
+            kpi_fares,
+            kpi_seasonal,
+            kpi_routes,
+            kpi_bookings,
+        ) = transform(df_raw)
 
         # Load to PostgreSQL (analytics)
 
-        # Load to PostgreSQL (analytics)
-        load_to_postgres(df_transformed, config={"table_name": "flight_prices"})
+        # Load dimensions
+        load_to_postgres(dim_airline, config={"table_name": "dim_airline"})
+        load_to_postgres(dim_route, config={"table_name": "dim_route"})
+        load_to_postgres(dim_class, config={"table_name": "dim_class"})
+        load_to_postgres(
+            dim_booking_source, config={"table_name": "dim_booking_source"}
+        )
 
-        # Airline Fares
+        # Load fact table
+        load_to_postgres(
+            fact_flight_prices, config={"table_name": "fact_flight_prices"}
+        )
+
+        # Load KPIs
         load_to_postgres(kpi_fares, config={"table_name": "kpi_airline_fares"})
-
-        # Seasonal Variation
         load_to_postgres(kpi_seasonal, config={"table_name": "kpi_seasonal_variation"})
-
-        # Popular Routes
         load_to_postgres(kpi_routes, config={"table_name": "kpi_popular_routes"})
-
-        # Airline Bookings
         load_to_postgres(kpi_bookings, config={"table_name": "kpi_airline_bookings"})
 
         logger.info("ETL Pipeline completed successfully!")
