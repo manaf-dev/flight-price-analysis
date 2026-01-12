@@ -23,4 +23,3 @@ RUN chown -R spark:spark /opt/jobs /opt/data /opt/jars
 
 USER spark
 
-# ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

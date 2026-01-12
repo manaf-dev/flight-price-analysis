@@ -6,7 +6,6 @@ USER root
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     default-libmysqlclient-dev \
-    gcc \
     wget \
     openjdk-17-jre-headless && \
     curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
@@ -22,7 +21,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH=$PATH:$JAVA_HOME/bin
 
 # Install Spark (client mode only - for spark-submit)
-ENV SPARK_VERSION=3.5.0
+ENV SPARK_VERSION=3.5.1
 ENV HADOOP_VERSION=3
 ENV SPARK_HOME=/opt/spark
 
