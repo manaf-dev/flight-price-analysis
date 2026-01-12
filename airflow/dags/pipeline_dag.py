@@ -126,7 +126,11 @@ def validate_postgres_data(**context):
     postgres_hook = PostgresHook(postgres_conn_id="postgres_analytics")
 
     tables = [
-        "flight_prices",
+        "dim_airline",
+        "dim_route",
+        "dim_class",
+        "dim_booking_source",
+        "fact_flight_prices",
         "kpi_airline_fares",
         "kpi_seasonal_variation",
         "kpi_popular_routes",
@@ -134,6 +138,7 @@ def validate_postgres_data(**context):
     ]
 
     results = {}
+    all_tables_exist = True
 
     for table in tables:
         # Check existence
@@ -147,6 +152,7 @@ def validate_postgres_data(**context):
 
         if not exists:
             logger.warning(f"Table '{table}' does not exist in PostgreSQL")
+            all_tables_exist = False
             continue
 
         # Check row count
@@ -154,8 +160,11 @@ def validate_postgres_data(**context):
         results[table] = row_count
         logger.info(f"Table '{table}': {row_count} records")
 
-    if results.get("flight_prices", 0) == 0:
-        raise ValueError("Main 'flight_prices' table is empty")
+    if not all_tables_exist:
+        raise ValueError("One or more analytics tables were not created.")
+
+    if results.get("fact_flight_prices", 0) == 0:
+        raise ValueError("Main 'fact_flight_prices' table is empty")
 
     return results
 
