@@ -1,7 +1,8 @@
 x-airflow-common:
   &airflow-common
   build:
-    context: ./docker/airflow
+    context: .
+    dockerfile: ./docker/airflow/Dockerfile
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -19,7 +20,6 @@ x-airflow-common:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
-  user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
     postgres_airflow:
@@ -49,6 +49,7 @@ services:
   airflow-server:
     <<: *airflow-common
     command: webserver
+    container_name: airflow-server
     ports:
       - "8080:8080"
     volumes:
@@ -77,6 +78,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    container_name: airflow-scheduler
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
@@ -148,16 +150,14 @@ services:
   # PostgreSQL for Analytics
   postgres_analytics:
     image: postgres:14-alpine
-    container_name: postgres_analytics
+    container_name: postgres-analytics
     environment:
       POSTGRES_USER: analytics_user
       POSTGRES_PASSWORD: analytics_password
       POSTGRES_DB: analytics_db
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_analytics_data:/var/lib/postgresql/data
-      - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
+      # - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U analytics_user -d analytics_db"]
       interval: 10s
@@ -169,7 +169,9 @@ services:
 
   # Spark Master
   spark-master:
-    build: .
+    build: 
+      context: .
+      dockerfile: ./docker/spark/Dockerfile
     container_name: spark-master
     command: >
       /opt/spark/bin/spark-class
@@ -196,7 +198,9 @@ services:
 
   # Spark Worker 1
   spark-worker-1:
-    build: .
+    build: 
+      context: .
+      dockerfile: ./docker/spark/Dockerfile
     container_name: spark-worker-1
     depends_on:
       spark-master:
@@ -221,7 +225,9 @@ services:
 
   # Spark Worker 2
   spark-worker-2:
-    build: .
+    build: 
+      context: .
+      dockerfile: ./docker/spark/Dockerfile
     container_name: spark-worker-2
     depends_on:
       spark-master:
