@@ -1,7 +1,7 @@
 -- MySQL staging database schema
-DROP TABLE IF EXISTS staging_prices;
+DROP TABLE IF EXISTS raw_prices;
 
-CREATE TABLE staging_prices (
+CREATE TABLE raw_prices (
     id INT AUTO_INCREMENT PRIMARY KEY,
     airline VARCHAR(255) NOT NULL,
     source VARCHAR(255) NOT NULL,

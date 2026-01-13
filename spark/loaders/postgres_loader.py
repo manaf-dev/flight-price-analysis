@@ -20,9 +20,9 @@ def load_to_postgres(df, config):
 
         pg_host = 'postgres_analytics'
         pg_port = '5432'
-        pg_database = 'analytics_db'
-        pg_user = 'analytics_user'
-        pg_password = 'analytics_password'
+        pg_database = "psql_db"
+        pg_user = "psql_user"
+        pg_password = "psql_pass"
         pg_table = config.get("table_name")
 
         # Build JDBC URL for PostgreSQL
