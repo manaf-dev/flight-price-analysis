@@ -1,8 +1,6 @@
 x-airflow-common:
   &airflow-common
-  build:
-    context: .
-    dockerfile: ./docker/airflow/Dockerfile
+  build: .
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -11,10 +9,11 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
+    PYTHONPATH: /opt/jobs:/opt/airflow/dags
     # Connection configurations
-    AIRFLOW_CONN_SPARK_DEFAULT: 'spark://spark-master:7077'
-    AIRFLOW_CONN_MYSQL_STAGING: 'mysql://staging_user:staging_password@mysql:3306/staging_db'
-    AIRFLOW_CONN_POSTGRES_ANALYTICS: 'postgres://analytics_user:analytics_password@postgres_analytics:5432/analytics_db'
+    AIRFLOW_CONN_SPARK_DEFAULT: 'local[*]'
+    AIRFLOW_CONN_MYSQL_STAGING: 'mysql://mysql_user:mysql_pass@mysql:3306/mysql_db'
+    AIRFLOW_CONN_POSTGRES_ANALYTICS: 'postgres://psql_user:psql_pass@postgres_analytics:5432/psql_db'
     AIRFLOW_CONN_FS_DEFAULT: '{"conn_type": "fs", "extra": {"path": "/opt/data"}}'
   volumes:
     - ./airflow/dags:/opt/airflow/dags
@@ -24,7 +23,6 @@ x-airflow-common:
     &airflow-common-depends-on
     postgres_airflow:
       condition: service_healthy
-    
 
 services:
   # PostgreSQL for Airflow metadata
@@ -45,61 +43,11 @@ services:
     networks:
       - flight_network
 
-  # Airflow Webserver
-  airflow-server:
-    <<: *airflow-common
-    command: webserver
-    container_name: airflow-server
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
-      - ./spark:/opt/jobs
-      - ./data:/opt/data
-      - ./jars:/opt/jars
-      - /var/run/docker.sock:/var/run/docker.sock
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
-    depends_on:
-      - postgres_airflow
-      - mysql
-      - postgres_analytics
-      - spark-master
-    networks:
-      - flight_network
-
-  # Airflow Scheduler
-  airflow-scheduler:
-    <<: *airflow-common
-    command: scheduler
-    container_name: airflow-scheduler
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
-      - ./spark:/opt/jobs
-      - ./data:/opt/data
-      - ./jars:/opt/jars
-      - /var/run/docker.sock:/var/run/docker.sock
-    restart: unless-stopped
-    depends_on:
-      - postgres_airflow
-      - mysql
-      - postgres_analytics
-      - spark-master
-    networks:
-      - flight_network
-
-  # Airflow Init
+  # Airflow Init - MUST come before webserver and scheduler
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
+    container_name: airflow-init
     command:
       - -c
       - |
@@ -124,22 +72,80 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
     networks:
       - flight_network
+    restart: "no"  # Don't restart - it should run once and exit
 
+  # Airflow Webserver
+  airflow-server:
+    <<: *airflow-common
+    command: webserver
+    container_name: airflow-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./spark:/opt/jobs
+      - ./data:/opt/data
+      - ./jars:/opt/jars
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      postgres_airflow:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully  # Wait for init to complete
+      mysql:
+        condition: service_healthy
+      postgres_analytics:
+        condition: service_healthy
+    networks:
+      - flight_network
 
-  # Mysql for staging
+  # Airflow Scheduler
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    container_name: airflow-scheduler
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./spark:/opt/jobs
+      - ./data:/opt/data
+      - ./jars:/opt/jars
+    restart: unless-stopped
+    depends_on:
+      postgres_airflow:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully  # Wait for init to complete
+      mysql:
+        condition: service_healthy
+      postgres_analytics:
+        condition: service_healthy
+    networks:
+      - flight_network
+
+  # MySQL for staging
   mysql:
     image: mysql:8.4
-    container_name: mysql_staging
+    container_name: staging
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: staging_db
-      MYSQL_USER: staging_user
-      MYSQL_PASSWORD: staging_password
+      MYSQL_DATABASE: mysql_db
+      MYSQL_USER: mysql_user
+      MYSQL_PASSWORD: mysql_pass
     volumes:
       - mysql_staging_data:/var/lib/mysql
       - ./sql/init_staging.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "staging_user", "-pstaging_password"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "mysql_user", "-pmysql_pass"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -150,105 +156,21 @@ services:
   # PostgreSQL for Analytics
   postgres_analytics:
     image: postgres:14-alpine
-    container_name: postgres-analytics
+    container_name: analytics
     environment:
-      POSTGRES_USER: analytics_user
-      POSTGRES_PASSWORD: analytics_password
-      POSTGRES_DB: analytics_db
+      POSTGRES_USER: psql_user
+      POSTGRES_PASSWORD: psql_pass
+      POSTGRES_DB: psql_db
     volumes:
       - postgres_analytics_data:/var/lib/postgresql/data
-      # - ./sql/init_analytics.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U analytics_user -d analytics_db"]
+      test: ["CMD-SHELL", "pg_isready -U psql_user -d psql_db"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
       - flight_network
-
-  # Spark Master
-  spark-master:
-    build: 
-      context: .
-      dockerfile: ./docker/spark/Dockerfile
-    container_name: spark-master
-    command: >
-      /opt/spark/bin/spark-class
-      org.apache.spark.deploy.master.Master
-      --host spark-master
-      --port 7077
-      --webui-port 8080
-    ports:
-      - "8081:8080"
-      - "7077:7077"
-    volumes:
-      - ./spark:/opt/jobs
-      - ./data:/opt/data
-      - ./jars:/opt/jars
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - flight_network
-
-
-  # Spark Worker 1
-  spark-worker-1:
-    build: 
-      context: .
-      dockerfile: ./docker/spark/Dockerfile
-    container_name: spark-worker-1
-    depends_on:
-      spark-master:
-        condition: service_healthy
-    command: >
-      /opt/spark/bin/spark-class
-      org.apache.spark.deploy.worker.Worker
-      spark://spark-master:7077
-    environment:
-      SPARK_WORKER_MEMORY: 2G
-      SPARK_WORKER_CORES: 2
-    ports:
-      - "8082:8081"
-    volumes:
-      - ./spark:/opt/jobs
-      - ./data:/opt/data
-      - ./jars:/opt/jars
-    restart: unless-stopped
-    networks:
-      - flight_network
-
-
-  # Spark Worker 2
-  spark-worker-2:
-    build: 
-      context: .
-      dockerfile: ./docker/spark/Dockerfile
-    container_name: spark-worker-2
-    depends_on:
-      spark-master:
-        condition: service_healthy
-    command: >
-      /opt/spark/bin/spark-class
-      org.apache.spark.deploy.worker.Worker
-      spark://spark-master:7077
-    environment:
-      SPARK_WORKER_MEMORY: 2G
-      SPARK_WORKER_CORES: 2
-    ports:
-      - "8083:8081"
-    volumes:
-      - ./spark:/opt/jobs
-      - ./data:/opt/data
-      - ./jars:/opt/jars
-    restart: unless-stopped
-    networks:
-      - flight_network
-
 
 volumes:
   postgres_airflow_data:
